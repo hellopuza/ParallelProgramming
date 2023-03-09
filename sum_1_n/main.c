@@ -29,6 +29,12 @@ float getSum(int begin, int end)
 int main(int argc, char* argv[])
 {
     comm_info_t mpi = init_mpi(argc, argv);
+    if (argc < 2)
+    {
+        printf("Input required\n");
+        MPI_Finalize();
+        return 1;
+    }
 
     int N = 0;
     sscanf(argv[1], "%d", &N);
@@ -46,7 +52,7 @@ int main(int argc, char* argv[])
             MPI_Recv(&increment, 1, MPI_FLOAT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             sum += increment;
         }
-        printf("%f\n", sum);
+        printf("%.4f\n", sum);
     }
     else
     {

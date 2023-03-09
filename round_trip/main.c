@@ -23,7 +23,8 @@ int main(int argc, char* argv[])
     if (mpi.rank == 0)
     {
         int N = 0;
-        MPI_Send(&N, 1, MPI_INT, 1, 0, MPI_COMM_WORLD);
+        int next_rank = (mpi.size == 1) ? 0 : 1;
+        MPI_Send(&N, 1, MPI_INT, next_rank, 0, MPI_COMM_WORLD);
     }
 
     int N = 0;

@@ -7,6 +7,9 @@
 #include <gmp.h>
 #include <mpfr.h>
 
+#define M_PI 3.14159265358979323846
+#define M_E  2.71828182845904523536
+
 typedef struct
 {
     int size;
@@ -30,34 +33,23 @@ comm_info_t init_mpi(int argc, char* argv[])
 
 void send_mpz(mpz_t num, int dest, int tag, MPI_Comm comm)
 {
-    uint32_t size = (mpz_sizeinbase(num, 2) - 1) / 8 + 1;
-    uint32_t count = size / sizeof(uint32_t);
-    count = (count == 0) ? 1 : count;
-    uint32_t* ptr = (uint32_t*)malloc(size);
-
-    mpz_export(ptr, NULL, 1, sizeof(uint32_t), 0, 0, num);
-    MPI_Send(&size, 1, MPI_UNSIGNED, dest, tag, comm);
-    MPI_Send(ptr, count, MPI_UNSIGNED, dest, tag, comm);
-    free(ptr);
+    MPI_Send(&num->_mp_alloc, 1, MPI_INT, dest, tag, comm);
+    MPI_Send(&num->_mp_size, 1, MPI_INT, dest, tag, comm);
+    MPI_Send(num->_mp_d, num->_mp_alloc * sizeof(mp_limb_t), MPI_BYTE, dest, tag, comm);
 }
 
 void recv_mpz(mpz_t num, int source, int tag, MPI_Comm comm)
 {
-    uint32_t size = 0;
-    MPI_Recv(&size, 1, MPI_UNSIGNED, source, tag, comm, MPI_STATUS_IGNORE);
-    uint32_t count = size / sizeof(uint32_t);
-    count = (count == 0) ? 1 : count;
+    MPI_Recv(&num->_mp_alloc, 1, MPI_INT, source, tag, comm, MPI_STATUS_IGNORE);
+    MPI_Recv(&num->_mp_size, 1, MPI_INT, source, tag, comm, MPI_STATUS_IGNORE);
 
-    uint32_t* ptr = (uint32_t*)malloc(size);
-    MPI_Recv(ptr, count, MPI_UNSIGNED, source, tag, comm, MPI_STATUS_IGNORE);
-    mpz_import(num, count, 1, sizeof(uint32_t), 0, 0, ptr);
-    free(ptr);
+    num->_mp_d = (mp_limb_t*)calloc(num->_mp_alloc, sizeof(mp_limb_t));
+    MPI_Recv(num->_mp_d, num->_mp_alloc * sizeof(mp_limb_t), MPI_BYTE, source, tag, comm, MPI_STATUS_IGNORE);
 }
 
-uint32_t bits_estimation(uint32_t num)
+uint32_t bits_estimation(uint32_t d)
 {
-    float n = (float)num;
-    return (uint32_t)ceilf((3.5F + n) * log2f(n) + log2f(sqrtf(2.0F * M_PI)) - n * log2f(M_E));
+    return 64 + (uint32_t)ceilf(log2f(10.0F) * d);
 }
 
 uint32_t error_estimation(uint32_t x)
@@ -79,7 +71,7 @@ uint32_t get_number_of_sum_elements(uint32_t digits_num)
     return a;
 }
 
-void calc_e_parallel(mpfr_t e, uint32_t num, comm_info_t mpi)
+void calc_e(mpfr_t e, uint32_t num, comm_info_t mpi)
 {
     uint32_t range = num / mpi.size;
     uint32_t first_term = mpi.rank * range + 1;
@@ -114,29 +106,34 @@ void calc_e_parallel(mpfr_t e, uint32_t num, comm_info_t mpi)
         terms_num = (terms_num / 2) + (terms_num % 2);
     }
 
-    if (mpi.rank == 0)
+    mpz_t p, q;
+    int step = 1;
+    while (step < mpi.size)
     {
-        mpz_t p, q;
-        mpz_inits(p, q, NULL);
-        for (int i = 1; i < mpi.size; i++)
+        if ((mpi.rank % (step * 2) == 0) && (mpi.rank < mpi.size - step))
         {
-            recv_mpz(p, i, 0, MPI_COMM_WORLD);
-            recv_mpz(q, i, 0, MPI_COMM_WORLD);
+            recv_mpz(p, mpi.rank + step, 0, MPI_COMM_WORLD);
+            recv_mpz(q, mpi.rank + step, 0, MPI_COMM_WORLD);
 
             mpz_mul(terms[0].p, terms[0].p, q);
             mpz_add(terms[0].p, terms[0].p, p);
             mpz_mul(terms[0].q, terms[0].q, q);
-        }
-        mpz_clears(p, q, NULL);
 
+            free(p->_mp_d);
+            free(q->_mp_d);
+        }
+        else if (mpi.rank % (step * 2) == step)
+        {
+            send_mpz(terms[0].p, mpi.rank - step, 0, MPI_COMM_WORLD);
+            send_mpz(terms[0].q, mpi.rank - step, 0, MPI_COMM_WORLD);
+        }
+        step *= 2;
+    }
+    if (mpi.rank == 0)
+    {
         mpfr_set_z(e, terms[0].p, MPFR_RNDZ);
         mpfr_div_z(e, e, terms[0].q, MPFR_RNDZ);
         mpfr_add_ui(e, e, 1, MPFR_RNDZ);
-    }
-    else
-    {
-        send_mpz(terms[0].p, 0, 0, MPI_COMM_WORLD);
-        send_mpz(terms[0].q, 0, 0, MPI_COMM_WORLD);
     }
 
     mpz_clears(terms[0].p, terms[0].q, NULL);
@@ -146,20 +143,30 @@ void calc_e_parallel(mpfr_t e, uint32_t num, comm_info_t mpi)
 int main(int argc, char* argv[])
 {
     comm_info_t mpi = init_mpi(argc, argv);
+    if (argc < 2)
+    {
+        printf("Input required\n");
+        MPI_Finalize();
+        return 1;
+    }
 
     uint32_t digits = 0;
     sscanf(argv[1], "%u", &digits);
     uint32_t num = get_number_of_sum_elements(digits);
-    mpfr_set_default_prec(bits_estimation(num));
+    mpfr_set_default_prec(bits_estimation(digits));
 
     mpfr_t e;
     mpfr_init(e);
 
     double time0 = MPI_Wtime();
-    calc_e_parallel(e, num, mpi);
+    calc_e(e, num, mpi);
     double time1 = MPI_Wtime();
-    //if (mpi.rank == 0) mpfr_printf("%.5lf %.*Rf\n", time1 - time0, (int)digits, e);
-    printf("%d %.8lf\n", mpi.rank, time1 - time0);
+
+#ifdef CALC_TIME
+    if (mpi.rank == 0) printf("%.6lf\n", time1 - time0);
+#else
+    if (mpi.rank == 0) mpfr_printf("%.*Rf\n", (int)digits, e);
+#endif
 
     mpfr_clear(e);
 
