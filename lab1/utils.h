@@ -46,15 +46,29 @@ void print_solution(comm_info_t mpi, funcxy_t f, funcx_t phi, funcx_t psi, int x
 {
     float* data = get_solution(mpi, f, phi, psi, x_points_num, t_points_num, max_x, max_t);
 
+    int range = x_points_num / mpi.size;
+    float* line = (float*)malloc(sizeof(float) * x_points_num * mpi.size);
+
     for (int n = 0; n < t_points_num; n++)
     {
-        for (int i = 0; i < x_points_num; i++)
+        MPI_Gather(&data[n * x_points_num], x_points_num, MPI_FLOAT, line, x_points_num, MPI_FLOAT, 0, mpi.comm);
+        if (mpi.rank == 0)
         {
-            printf("%.6lf ", data[n * x_points_num + i]);
+            for (int i = 0; i < x_points_num; i++)
+            {
+                int rank = i / range;
+                rank = rank > (mpi.size - 1) ? mpi.size - 1 : rank;
+                printf("%.6f ", line[rank * x_points_num + i]);
+            }
         }
-        printf("\n");
+
+        if (mpi.rank == 0)
+        {
+            printf("\n");
+        }
     }
 
+    free(line);
     free(data);
 }
 
