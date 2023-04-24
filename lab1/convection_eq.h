@@ -79,7 +79,6 @@ float* solve_parallel(comm_info_t mpi, funcxy_t f, funcx_t phi, funcx_t psi, int
     int range = x_points_num / mpi.size;
     int begin_i = mpi.rank * range;
     int end_i = ((mpi.rank == mpi.size - 1) ? x_points_num : (mpi.rank + 1) * range) - 1;
-    int loc_num = end_i - begin_i + 1;
 
     LAMBDAS
 

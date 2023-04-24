@@ -1,1 +1,14 @@
+# Temp files created by most text editors.
+*~
+# Merge files created by git.
+*.orig
+# vim swap files
+.*.sw?
+.sw?
+
+# VSCode config files.
 .vscode
+.vs
+
+# Build files.
+build
