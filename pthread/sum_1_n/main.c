@@ -9,7 +9,7 @@ typedef struct
     int id;
     int num_thr;
     int N;
-    float sum;
+    double sum;
 } thread_data_t;
 
 void* sum(void* arg)
@@ -19,10 +19,10 @@ void* sum(void* arg)
     int begin = data->id * range + 1;
     int end = (data->id == data->num_thr - 1) ? data->N : (data->id + 1) * range;
 
-    data->sum = 0.0F;
+    data->sum = 0.0;
     for (int i = begin; i <= end; i++)
     {
-        data->sum += 1.0F / (float)i;
+        data->sum += 1.0 / (double)i;
     }
     return NULL;
 }
@@ -73,7 +73,7 @@ int main(int argc, char* argv[])
     {
         arg[0].sum += arg[i].sum;
     }
-    printf("%f\n", arg[0].sum);
+    printf("%lf\n", arg[0].sum);
 
     free(arg);
 }
