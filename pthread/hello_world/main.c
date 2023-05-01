@@ -7,11 +7,13 @@ typedef void* (*routine_t)(void*);
 typedef struct
 {
     int id;
+    int num_thr;
 } thread_data_t;
 
 void* hello(void* arg)
 {
-    printf("Hello, world! thread id = %d\n", ((thread_data_t*)arg)->id);
+    thread_data_t* data = (thread_data_t*)arg;
+    printf("Hello, world! thread id = %d, threads number = %d\n", data->id, data->num_thr);
     return NULL;
 }
 
@@ -49,6 +51,7 @@ int main(int argc, char* argv[])
     for (int i = 0; i < num_thr; i++)
     {
         arg[i].id = i;
+        arg[i].num_thr = num_thr;
     }
     run_threads(num_thr, hello, arg);
     free(arg);
