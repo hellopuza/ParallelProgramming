@@ -73,7 +73,7 @@ double trapezoidal(double a, double b, double f_a, double f_b)
 
 int accuracy_is_good(double old_val, double new_val, double err)
 {
-    return fabs(1.0 - old_val / new_val) < err;
+    return fabs(new_val - old_val) < err;
 }
 
 int stack_size(double a, double b)
@@ -208,7 +208,7 @@ void* integral_routine(void* arg)
             double s_cb = trapezoidal(c, data.b, f_c, data.f_b);
             double s_new = s_ac + s_cb;
 
-            if (accuracy_is_good(data.s, s_new, global->err))
+            if (accuracy_is_good(data.s, s_new, global->err * (data.b - data.a)))
             {
                 local_s += s_new;
 
@@ -251,7 +251,7 @@ double integrate(int num_thr, func_t f, double a, double b, double err)
     arg.big_stack_size = big_stack_size(a, b, err);
     arg.num_thr_active = 0;
     arg.s = 0.0;
-    arg.err = err;
+    arg.err = err / (b - a) * 0.1;
 
     stack_init(&arg.stk, stack_size(a, b));
     stack_push(&arg.stk, (integral_data_t){a, b, f(a), f(b), trapezoidal(a, b, f(a), f(b))});

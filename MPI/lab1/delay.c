@@ -50,7 +50,7 @@ double get_time(comm_info_t mpi)
     }
     MPI_Barrier(mpi.comm);
 
-    return time * 0.5F;
+    return time * 0.5;
 }
 
 int main(int argc, char* argv[])
