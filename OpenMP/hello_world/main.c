@@ -3,7 +3,7 @@
 
 int main()
 {
-#pragma omp parallel
+    #pragma omp parallel
     {
         int threads_num = omp_get_num_threads();
         int current_thread = omp_get_thread_num();

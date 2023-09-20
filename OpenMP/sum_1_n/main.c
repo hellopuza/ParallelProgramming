@@ -23,7 +23,7 @@ int main(int argc, char* argv[])
     int N = 0;
     sscanf(argv[1], "%d", &N);
 
-#pragma omp parallel reduction(+:sum)
+    #pragma omp parallel reduction(+:sum)
     {
         int threads_num = omp_get_num_threads();
         int current_thread = omp_get_thread_num();
