@@ -23,6 +23,7 @@ int main(int argc, char* argv[])
     int N = 0;
     sscanf(argv[1], "%d", &N);
 
+    double time = omp_get_wtime();
     #pragma omp parallel reduction(+:sum)
     {
         int threads_num = omp_get_num_threads();
@@ -34,7 +35,14 @@ int main(int argc, char* argv[])
 
         sum += getSum(begin, end);
     }
+    time -= omp_get_wtime();
 
-    printf("%.8f\n", sum);
+    printf("parallel: %.8f, time: %.3e\n", sum, time);
+
+    time = omp_get_wtime();
+    sum = getSum(1, N);
+    time -= omp_get_wtime();
+    printf("single: %.8f, time: %.3e\n", sum, time);
+
     return 0;
 }
