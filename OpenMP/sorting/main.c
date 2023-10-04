@@ -1,59 +1,53 @@
-#include "matrix.h"
+#include "sorting.h"
 #include <stdio.h>
+#include <time.h>
 
-typedef void(*matmul_t)(mat_t, mat_t, mat_t, size_t);
-
-double test_mul(size_t size, matmul_t func)
+double test_sorting(size_t size, sort_t func)
 {
-    mat_t a, b, c;
-    mat_create(a, size);
-    mat_create(b, size);
-    mat_create(c, size);
-    mat_init(a, size);
-    mat_init(b, size);
+    srand(0);
+    int* arr = (int*)malloc(sizeof(int) * size);
+    for (int i = 0; i < size; i++)
+    {
+        arr[i] = rand();
+    }
 
     double time = omp_get_wtime();
-    func(a, b, c, size);
+    func(arr, size);
     time = omp_get_wtime() - time;
 
 #ifdef DEBUG
-    if (check_mul(a, b, c, size))
+    if (check_sorting(arr, size))
     {
-        printf("Wrong multiplication\n");
+        printf("Wrong sorting\n");
         exit(1);
     }
 #endif
 
-    free(a);
-    free(b);
-    free(c);
-
+    free(arr);
     return time;
 }
 
-#define PRINT_MUL_TEST(func) \
-    printf("%-30s : %lf\n", #func, test_mul(mat_size, func));
+#define PRINT_SORT_TEST(func) \
+    printf("%-30s : %lf\n", #func, test_sorting(size, func));
 
 int main(int argc, char* argv[])
 {
-    if (argc != 2)
+    if (argc != 3)
     {
-        printf("Matrix size required\n");
+        printf("Array size and threads num required\n");
         exit(1);
     }
 
-    size_t mat_size = 0;
-    sscanf(argv[1], "%lu", &mat_size);
+    int size = 0;
+    int nproc = 0;
+    sscanf(argv[1], "%d", &size);
+    sscanf(argv[2], "%d", &nproc);
 
-    PRINT_MUL_TEST(mat_mul);
-    PRINT_MUL_TEST(mat_mul_parallel);
-    PRINT_MUL_TEST(mat_mul_opt_tran);
-    PRINT_MUL_TEST(mat_mul_opt_tran_parallel);
-    PRINT_MUL_TEST(mat_mul_opt_block);
-    PRINT_MUL_TEST(mat_mul_opt_block_parallel);
-    PRINT_MUL_TEST(mat_mul_strassen);
-    PRINT_MUL_TEST(mat_mul_strassen_parallel);
-    PRINT_MUL_TEST(mat_mul_strassen_simd);
-    PRINT_MUL_TEST(mat_mul_strassen_simd_parallel);
+    omp_set_num_threads(nproc);
+
+    PRINT_SORT_TEST(merge_sort);
+    PRINT_SORT_TEST(merge_sort_parallel);
+    PRINT_SORT_TEST(quick_sort);
+    PRINT_SORT_TEST(quick_sort_parallel);
 }
 
