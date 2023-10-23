@@ -28,3 +28,5 @@ a45 = a21
 a46 = a22
 a47 = a23
 a48 = a24 // flow-dep
+
+a[JS * i + j] = a[JS * i + j - (4 + 2 * JS)]
