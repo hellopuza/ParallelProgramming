@@ -5,18 +5,15 @@
 
 int main()
 {
-    __m256 w = _mm256_set_ps(0, PI, 2 * PI, 3 * PI, 4 * PI, 5 * PI, 6 * PI, 7 * PI);
-    __m256 c = cos256_ps(w);
-    __m256 s = sin256_ps(w);
-    for (int i = 0; i < 8; i++)
+    int size = 32;
+    float* in = (float*)malloc(sizeof(float) * size);
+    complex_t* out = (complex_t*)malloc(sizeof(complex_t) * size);
+    for (int i = 0; i < size; i++)
     {
-        printf("%f ", ((float*)&c)[i]);
-    } printf("\n");
-
-    for (int i = 0; i < 8; i++)
-    {
-        printf("%f ", ((float*)&s)[i]);
-    } printf("\n");
+        in[i] = i;
+    }
+    fft_parallel(in, out, size);
+    fft_parallel_opt(in, out, size);
 
     return 0;
 }
