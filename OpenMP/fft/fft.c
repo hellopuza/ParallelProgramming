@@ -8,6 +8,12 @@
 
 #define complex_t complex float
 
+union vec8
+{
+    __m256 m;
+    float v[8];
+};
+
 typedef void(*fft_t)(float*, complex_t*, size_t);
 
 void swap(float* a, float* b)
@@ -17,7 +23,7 @@ void swap(float* a, float* b)
     *b = t;
 }
 
-const float PI = acos(-1.0F);
+const float PI2 = acos(-1.0F) * 2.0F;
 
 size_t reverse(size_t num, size_t log_n)
 {
@@ -44,7 +50,7 @@ void fft(const float* data, complex_t* out, size_t size)
 
     for (size_t m = 2; m <= size; m <<= 1)
     {
-        complex_t a = 2.0F * PI * I / m;
+        complex_t a = PI2 * I / m;
         const size_t n = m >> 1;
         for (size_t k = 0; k < size; k += m)
         {
@@ -74,7 +80,7 @@ void fft_parallel(const float* data, complex_t* out, size_t size)
 
     for (size_t m = 2; m <= size; m <<= 1)
     {
-        complex_t a = 2.0F * PI * I / m;
+        complex_t a = PI2 * I / m;
         const size_t n = m >> 1;
         #pragma omp parallel for collapse(2)
         for (size_t k = 0; k < size; k += m)
@@ -103,48 +109,45 @@ void fft_parallel_opt(const float* data, complex_t* out, size_t size)
         out[reverse(i, log_n)] = data[i];
     }
 
-    const size_t end_j = size >> 1;
+    const float* re = (float*)out;
+    const float* im = (float*)out + 1;
+    const size_t end_j = size >> 4;
+    const __m256i ind = _mm256_set_epi32(7, 6, 5, 4, 3, 2, 1, 0);
+
     for (size_t m = 2; m <= size; m <<= 1)
     {
-        const float a = 2.0F * PI / m;
+        const float a = PI2 / m;
         const size_t n = m >> 1;
         #pragma omp parallel for
-        for (size_t j = 0; j < end_j; j += 8)
+        for (size_t j = 0; j < end_j; j++)
         {
-            __m256i jj = _mm256_set_epi32(j + 7, j + 6, j + 5, j + 4, j + 3, j + 2, j + 1, j + 0);
-            __m256i jn = _mm256_set_epi32(
-                (j + 7) % n, (j + 6) % n, (j + 5) % n, (j + 4) % n,
-                (j + 3) % n, (j + 2) % n, (j + 1) % n, (j + 0) % n
-            );
+            __m256i jj = _mm256_add_epi32(_mm256_set1_epi32(j << 3), ind);
+            __m256i jn = _mm256_and_si256(jj, _mm256_set1_epi32(n - 1));
             __m256i i1 = _mm256_sub_epi32(_mm256_slli_epi32(jj, 1), jn);
             __m256i i2 = _mm256_add_epi32(i1, _mm256_set1_epi32(n));
 
-            #undef I
-            #define R(n,ii) ((float*)&(out[_mm256_extract_epi32((ii),(n))]))[0]
-            #define I(n,ii) ((float*)&(out[_mm256_extract_epi32((ii),(n))]))[1]
-
-            __m256 re1 = _mm256_set_ps(R(7,i1), R(6,i1), R(5,i1), R(4,i1), R(3,i1), R(2,i1), R(1,i1), R(0,i1));
-            __m256 re2 = _mm256_set_ps(R(7,i2), R(6,i2), R(5,i2), R(4,i2), R(3,i2), R(2,i2), R(1,i2), R(0,i2));
-            __m256 im1 = _mm256_set_ps(I(7,i1), I(6,i1), I(5,i1), I(4,i1), I(3,i1), I(2,i1), I(1,i1), I(0,i1));
-            __m256 im2 = _mm256_set_ps(I(7,i2), I(6,i2), I(5,i2), I(4,i2), I(3,i2), I(2,i2), I(1,i2), I(0,i2));
+            __m256 re1 = _mm256_i32gather_ps(re, i1, 8);
+            __m256 re2 = _mm256_i32gather_ps(re, i2, 8);
+            __m256 im1 = _mm256_i32gather_ps(im, i1, 8);
+            __m256 im2 = _mm256_i32gather_ps(im, i2, 8);
 
             __m256 w = _mm256_mul_ps(_mm256_cvtepi32_ps(jn), _mm256_set1_ps(a));
-            __m256 c = cos256_ps(w);
-            __m256 s = sin256_ps(w);
+            __m256 s, c;
+            sincos256_ps(w, &s, &c);
 
-            __m256 t = _mm256_sub_ps(_mm256_mul_ps(re2, c), _mm256_mul_ps(im2, s));
-            im2 = _mm256_add_ps(_mm256_mul_ps(re2, s), _mm256_mul_ps(im2, c));
-            re2 = t;
+            __m256 tre = _mm256_sub_ps(_mm256_mul_ps(re2, c), _mm256_mul_ps(im2, s));
+            __m256 tim = _mm256_add_ps(_mm256_mul_ps(re2, s), _mm256_mul_ps(im2, c));
 
-            __m256 x11 = _mm256_add_ps(re1, re2);
-            __m256 x12 = _mm256_add_ps(im1, im2);
-            __m256 x21 = _mm256_sub_ps(re1, re2);
-            __m256 x22 = _mm256_sub_ps(im1, im2);
+            re2 = _mm256_sub_ps(re1, tre);
+            re1 = _mm256_add_ps(re1, tre);
+            im2 = _mm256_sub_ps(im1, tim);
+            im1 = _mm256_add_ps(im1, tim);
 
-            #define F(n,xii) ((float*)&xii)[n]
-            #define C(n) R(n,i1) = F(n,x11); I(n,i1) = F(n,x12); R(n,i2) = F(n,x21); I(n,i2) = F(n,x22);
+            #define C(n,ii) out[_mm256_extract_epi32((i##ii),(n))]
+            #define F(n,i) C(n, i) = CMPLXF((union vec8){re##i}.v[n], (union vec8){im##i}.v[n]);
+            #define S(n) F(n,1); F(n,2);
 
-            C(0); C(1); C(2); C(3); C(4); C(5); C(6); C(7);
+            S(0); S(1); S(2); S(3); S(4); S(5); S(6); S(7);
         }
     }
 }
