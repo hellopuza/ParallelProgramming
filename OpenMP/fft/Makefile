@@ -1,5 +1,5 @@
 C=
-FLAGS= -fopenmp -mavx -mavx2 -march=native
+FLAGS= -fopenmp -march=native
 CFLAGS=-c $(FLAGS) $(DEFS)
 LDFLAGS= $(FLAGS)
 SOURCES=fft.c
